@@ -1,0 +1,22 @@
+@use './variables' as *; // ✅ 使用新的 @use 规则
+
+// 全局重置和基础样式
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  background-color: $bg-color;
+  color: $text-color;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: $accent-color;
+  text-decoration: none;
+}
