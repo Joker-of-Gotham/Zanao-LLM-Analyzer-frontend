@@ -1,4 +1,5 @@
-@use './variables' as *; // ✅ 使用新的 @use 规则
+// ✅ 核心修复：在文件顶部导入变量文件
+@use './variables' as *;
 
 // 全局重置和基础样式
 * {
@@ -10,8 +11,9 @@
 body {
   font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
-  background-color: $bg-color;
-  color: $text-color;
+  // ✅ 现在可以使用变量了
+  background-color: $bg-color-base; 
+  color: $text-color-base;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

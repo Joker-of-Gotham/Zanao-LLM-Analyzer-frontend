@@ -12,6 +12,9 @@ export interface Post {
   id: string;
   theme: string;
   title: string;
+  subTheme?: string; // ✅ NEW: 添加可选的子主题
+  username?: string; // ✅ NEW: 添加可选的用户名
+  score?: number;    // ✅ NEW: 添加可选的综合评分
   content: string;
   postTime: string;
   viewCount: number;

@@ -1,6 +1,5 @@
 import type { Post, ChartDataItem, SentimentAnalysisData, ActiveUser, EmergingTopic } from '../src/types/api';
 
-// ✅ NEW: 使用您提供的真实主题分类
 export const realThemes = {
   "机会类型": ["兼职 / 实习", "校园活动", "奖助学金", "比赛/竞赛", "调研/志愿"],
   "升学规划": ["保研", "考研", "出国", "留学"],
@@ -14,24 +13,47 @@ export const realThemes = {
 };
 
 
-// ✅ CHANGED: 模拟帖子的主题现在来自真实分类
-export const mockHotspotPosts: Post[] = [
-  { id: 'p001', theme: '考研', title: '标题：【25考研】数学一全程规划与资料分享', content: '内容：本人已上岸，分享一下自己整理的数学一全年复习规划和用过的宝藏资料...', postTime: '2025-08-14 10:30', viewCount: 1204, likeCount: 256, commentCount: 32, sentiment: 'positive' },
-  { id: 'p002', theme: '二手物品交易', title: '标题：出一个九成新显示器，带包装', content: '内容：自用一年，2k 144hz，无任何划痕，箱说全。因换新所以出。', postTime: '2025-08-14 09:15', viewCount: 987, likeCount: 198, commentCount: 45, sentiment: 'neutral' },
-  { id: 'p003', theme: '选课咨询', title: '标题：求问《人工智能导论》这门课怎么样？', content: '内容：请问有学长学姐上过这门课吗？任务量大吗？给分如何？', postTime: '2025-08-13 22:00', viewCount: 750, likeCount: 50, commentCount: 15 },
-  { id: 'p004', theme: '兼职 / 实习', title: '标题：【招聘】某互联网大厂招聘产品实习生', content: '内容：要求对用户体验有一定理解，每周可实习4天以上，薪资优厚。', postTime: '2025-08-14 11:30', viewCount: 1500, likeCount: 350, commentCount: 55, sentiment: 'positive' },
+const allMockPosts: Post[] = [
+  { id: 'p001', theme: '升学规划 / 考研', username: '学霸A', score: 98.5, title: '【25考研】数学一全程规划与资料分享', content: '内容：本人已上岸，分享一下自己整理的数学一全年复习规划和用过的宝藏资料，内容非常详细，希望能帮助到大家。', postTime: '2025-08-14 10:30', viewCount: 1204, likeCount: 256, commentCount: 32 },
+  { id: 'p002', theme: '生活服务 / 二手交易', username: '机智的学长', score: 95.2, title: '出一个九成新显示器，带包装', content: '内容：自用一年，2k 144hz，无任何划痕，箱说全。因换新所以出，价格可小刀，仅限校内自提。', postTime: '2025-08-14 09:15', viewCount: 987, likeCount: 198, commentCount: 45 },
+  { id: 'p003', theme: '课程相关 / 选课咨询', username: '迷茫的小白', score: 88.0, title: '求问《人工智能导论》这门课怎么样？', content: '内容：请问有学长学姐上过这门课吗？任务量大吗？给分如何？求真实测评！', postTime: '2025-08-13 22:00', viewCount: 750, likeCount: 50, commentCount: 15 },
+  { id: 'p004', theme: '机会类型 / 实习', username: 'HR-Lily', score: 99.1, title: '【招聘】某互联网大厂招聘产品实习生', content: '内容：要求对用户体验有一定理解，每周可实习4天以上，薪资优厚，有转正机会。', postTime: '2025-08-14 11:30', viewCount: 1500, likeCount: 350, commentCount: 55 },
+  { id: 'p005', theme: '机会类型 / 实习', username: 'HR-Lilysds', score: 93.1, title: '【招聘】某互联网大厂招聘数据分析实习生', content: '内容：需要熟练掌握SQL和Python，有相关项目经验者优先。', postTime: '2025-08-13 11:31', viewCount: 1501, likeCount: 340, commentCount: 25 },
+  { id: 'p006', theme: '资源共享 / 资料下载', username: '资料搬运工', score: 92.5, title: '分享最新版的高数叔复习全书PDF', content: '内容：高清无水印版本，需要的同学自取。', postTime: '2025-08-13 10:00', viewCount: 1100, likeCount: 300, commentCount: 40 },
+  { id: 'p007', theme: '生活服务 / 拼车', username: '老司机', score: 91.8, title: '周末找人拼车去机场，差2人', content: '内容：周六早上8点出发，有同行的吗？', postTime: '2025-08-12 20:00', viewCount: 600, likeCount: 20, commentCount: 8 },
+  { id: 'p008', theme: '社交互助 / 兴趣社群', username: '羽球达人', score: 90.3, title: '有没有羽毛球搭子，每周约球', content: '内容：水平中等，男女不限，主要是想锻炼身体。', postTime: '2025-08-12 18:00', viewCount: 550, likeCount: 45, commentCount: 18 },
+  { id: 'p009', theme: '升学规划 / 保研', username: '上岸的鱼', score: 97.6, title: '保研经验分享：如何准备夏令营', content: '内容：干货满满，从材料准备到面试技巧，全部分享。', postTime: '2025-08-14 08:00', viewCount: 1300, likeCount: 450, commentCount: 65 },
+  { id: 'p010', theme: '课程相关 / 学业辅导', username: '物理大神', score: 85.4, title: '免费答疑大学物理，有问题可以留言', content: '内容：看到很多学弟学妹在物理上遇到困难，开个帖子义务答疑。', postTime: '2025-08-11 23:00', viewCount: 800, likeCount: 150, commentCount: 90 },
+  { id: 'p011', theme: '生活服务 / 外卖团购', username: '拼单大师', score: 84.1, title: '楼下奶茶店拼单，有无兄弟姐妹', content: '内容：新品买一送一，还差一杯就凑够了，速来！', postTime: '2025-08-11 15:00', viewCount: 300, likeCount: 15, commentCount: 5 },
 ];
 
-// ... (其余模拟数据保持不变) ...
+export const getMockHotspotPosts = (page = 1, limit = 5): Promise<{ posts: Post[], hasMore: boolean }> => {
+  const start = (page - 1) * limit;
+  const end = start + limit;
+  const paginatedPosts = allMockPosts.slice(start, end);
+  const hasMore = end < allMockPosts.length;
+
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve({ posts: paginatedPosts, hasMore });
+    }, 500);
+  });
+};
+
 export const mockScoreChart: ChartDataItem[] = [
-  { name: '帖子A', value: 98 }, { name: '帖子B', value: 95 }, { name: '帖子C', value: 88 }, { name: '帖子D', value: 85 }, { name: '帖子E', value: 76 },
+  { name: '帖子D', value: 99.1 },
+  { name: '帖子A', value: 98.5 },
+  { name: '帖子I', value: 97.6 },
+  { name: '帖子B', value: 95.2 },
+  { name: '帖子E', value: 93.1 },
 ];
 export const mockWordCloud: ChartDataItem[] = [
   { name: '食堂', value: 120 }, { name: '图书馆', value: 98 }, { name: '自习', value: 85 }, { name: '二手', value: 77 }, { name: '羽毛球', value: 69 }, { name: '考研', value: 110 }, { name: '快递', value: 50 },
 ];
 export const mockSentimentData: SentimentAnalysisData = {
-  mostPositivePosts: [mockHotspotPosts[0]],
-  mostNegativePosts: [{ id: 'p004', theme: '吐槽', title: '标题：最消极帖子1', content: '内容：这门课也太难了，作业又多，感觉要挂了...', postTime: '2025-08-12 14:00', viewCount: 500, likeCount: 10, commentCount: 88, sentiment: 'negative' }],
+  // ✅ FIX: 直接引用 allMockPosts 中的数据
+  mostPositivePosts: [allMockPosts[3]], // 帖子D (产品实习生) 是分数最高的
+  mostNegativePosts: [{ id: 'p_neg_1', theme: '吐槽', title: '标题：最消极帖子1', content: '内容：这门课也太难了，作业又多，感觉要挂了...', postTime: '2025-08-12 14:00', viewCount: 500, likeCount: 10, commentCount: 88, sentiment: 'negative' }],
   sentimentPie: [{ name: '积极', value: 872 }, { name: '消极', value: 128 }],
   sentimentTimeline: [
     { date: '2025-08-10', positiveRate: 0.8, negativeRate: 0.2 }, { date: '2025-08-11', positiveRate: 0.7, negativeRate: 0.3 }, { date: '2025-08-12', positiveRate: 0.75, negativeRate: 0.25 }, { date: '2025-08-13', positiveRate: 0.85, negativeRate: 0.15 },

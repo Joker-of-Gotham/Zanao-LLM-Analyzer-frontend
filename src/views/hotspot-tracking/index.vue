@@ -1,188 +1,516 @@
 <template>
-  <div class="hotspot-tracking-page">
-    <h1>实时热帖</h1>
-
-    <n-grid :x-gap="24" :y-gap="24" :cols="3">
-      <!-- 左侧实时热帖列表 (保持不变) -->
-      <n-gi :span="2">
-        <n-card>
-          <template #header>
-            <n-tabs type="line" animated v-model:value="activeSort" size="large">
-              <n-tab-pane name="comprehensive" tab="综合评价" />
-              <n-tab-pane name="viewCount" tab="观看最多" />
-              <n-tab-pane name="likeCount" tab="点赞最多" />
-            </n-tabs>
-          </template>
-          <template #header-extra>
-            <n-select
-              v-model:value="selectedTheme"
-              placeholder="按主题筛选"
-              :options="themeOptions"
-              clearable
-              style="width: 220px"
-            />
-          </template>
-          <n-list hoverable clickable>
-            <n-list-item v-for="post in displayedPosts" :key="post.id">
-              <n-thing :title="post.title" content-style="margin-top: 10px;">
-                <template #description>
-                  <n-space size="small" style="margin-top: 4px">
-                    <n-tag :bordered="false" type="info" size="small">{{ post.theme }}</n-tag>
-                    <n-tag :bordered="false" type="default" size="small">{{ post.postTime }}</n-tag>
+  <div class="hotspot-page">
+    <div class="page-header">
+      <h2 class="section-title">实时热帖</h2>
+      <h2 class="section-title">综合呈现</h2>
+    </div>
+    
+    <div class="main-content">
+      <!-- 1. 实时热帖 -->
+      <section class="hotspot-section">
+        <div class="controls-wrapper">
+          <div class="sort-buttons">
+            <button v-for="sort in sortOptions" :key="sort.key" 
+                    :class="{ active: activeSort === sort.key }" @click="handleSortChange(sort.key)">
+              {{ sort.label }}
+            </button>
+          </div>
+          <n-popover trigger="click" placement="bottom-end" :show-arrow="false" content-style="padding: 0; background-color: #3e3e42; border-radius: 8px;">
+            <template #trigger>
+              <button class="filter-button" :class="{ active: selectedThemes.length > 0 }">
+                <n-icon :component="FilterListFilled" /> 筛选
+              </button>
+            </template>
+            <!-- 弹出的筛选面板：直接展示 Checkbox 列表 -->
+            <div class="filter-panel">
+              <n-scrollbar style="max-height: 400px;">
+                <n-checkbox-group v-model:value="selectedThemes">
+                  <n-space vertical :size="12">
+                    <div v-for="(options, groupName) in realThemes" :key="groupName" class="filter-group">
+                      <div class="filter-group-title">{{ groupName }}</div>
+                      <n-checkbox v-for="option in options" :key="option" :value="`${groupName} / ${option}`" :label="option" />
+                    </div>
                   </n-space>
-                </template>
-                {{ post.content }}
-                <template #footer>
-                  <n-space>
-                    <span>观看: {{ post.viewCount }}</span>
-                    <span>点赞: {{ post.likeCount }}</span>
-                    <span>评论: {{ post.commentCount }}</span>
-                  </n-space>
-                </template>
-              </n-thing>
-            </n-list-item>
-          </n-list>
-        </n-card>
-      </n-gi>
-
-      <!-- ✅ CHANGED: 右侧综合呈现部分已全面修改 -->
-      <n-gi :span="1">
-        <n-space vertical :size="24">
-          <n-card title="综合评分柱状图">
-            <!-- 如果数据已加载，则显示图表 -->
-            <div v-if="!isLoading && scoreData.length > 0" style="height: 300px;">
-              <BaseChart :option="scoreChartOption" height="300px" />
+                </n-checkbox-group>
+              </n-scrollbar>
             </div>
-            <!-- 否则，显示骨架屏加载动画 -->
-            <n-skeleton v-else text :repeat="6" style="height: 300px;" />
-          </n-card>
-
-          <n-card title="全局词云图">
-            <!-- 如果数据已加载，则显示图表 -->
-            <div v-if="!isLoading && wordCloudData.length > 0" style="height: 350px;">
-              <BaseChart :option="wordCloudOption" height="350px" />
+          </n-popover>
+        </div>
+        
+        <div v-if="selectedThemes.length > 0" class="selected-filters-wrapper">
+          <n-tag 
+            v-for="theme in selectedThemes" 
+            :key="theme" 
+            closable 
+            @close="removeTheme(theme)"
+            size="small"
+            round
+          >
+            {{ theme.split('/')[1]?.trim() || theme }}
+          </n-tag>
+        </div>
+        
+        <div class="posts-list-wrapper">
+          <div class="posts-list" v-if="!isInitialLoading">
+            <div v-for="post in displayedPosts" :key="post.id" class="post-item">
+              <div class="post-meta">
+                <span class="theme-main">{{ post.theme.split('/')[0].trim() }}</span>
+                <span class="theme-sub">{{ post.theme.split('/')[1]?.trim() }}</span>
+                <div class="post-time-group">
+                  <span class="post-date">{{ post.postTime.split(' ')[0] }}</span>
+                  <span class="post-time">{{ post.postTime.split(' ')[1] }}</span>
+                </div>
+              </div>
+              <div class="post-content">
+                <h3 class="post-title">{{ post.title }}</h3>
+                <p class="post-details" :class="{ 'is-expanded': expandedPosts[post.id] }">
+                  <span class="author">{{ post.username }}</span> - 
+                  <span class="content-text">{{ post.content }}</span>
+                </p>
+                <button class="expand-button" @click="toggleExpand(post.id)">
+                  {{ expandedPosts[post.id] ? '收起' : '展开' }}
+                </button>
+              </div>
+              <div class="post-stats">
+                <div class="stat-item"><strong>{{ post.score?.toFixed(1) }}</strong><span>综合分</span></div>
+                <div class="stat-item"><strong>{{ post.viewCount }}</strong><span>观看</span></div>
+                <div class="stat-item"><strong>{{ post.likeCount }}</strong><span>点赞</span></div>
+                <div class="stat-item"><strong>{{ post.commentCount }}</strong><span>评论</span></div>
+              </div>
             </div>
-            <!-- 否则，显示骨架屏加载动画 -->
-            <n-skeleton v-else text :repeat="6" style="height: 350px;" />
-          </n-card>
-        </n-space>
-      </n-gi>
-    </n-grid>
+          </div>
+          <div v-else class="posts-list loading">
+            <n-skeleton text :repeat="5" height="80px" style="margin-bottom: 16px" />
+          </div>
+        </div>
+        <div class="load-more-container" v-if="!isInitialLoading && hasMorePosts">
+           <n-button 
+            @click="loadMorePosts" 
+            :loading="isMoreLoading" 
+            strong secondary round
+            class="load-more-button"
+          >
+            加载更多
+          </n-button>
+        </div>
+      </section>
+
+      <!-- 2. 综合呈现 -->
+      <aside class="presentation-section">
+        <div class="charts-grid">
+          <div class="chart-container">
+            <h3>综合评分 TOP 5</h3>
+            <BaseChart v-if="!isInitialLoading && scoreData.length > 0" :option="scoreChartOption" />
+            <n-skeleton v-else text height="100%" />
+          </div>
+          <div class="chart-container">
+            <h3>全局词云</h3>
+            <BaseChart v-if="!isInitialLoading && wordCloudData.length > 0" :option="wordCloudOption" />
+            <n-skeleton v-else text height="100%" />
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import { getHotspotPosts, getScoreChartData, getWordCloudData } from '@/api';
-// ✅ CHANGED: 导入 realThemes，因为 themeOptions 依赖它
-import { realThemes } from '../../../mock/analysis'; 
+import { realThemes } from '../../../mock/analysis';
 import type { Post, ChartDataItem } from '@/types/api';
-// ✅ CHANGED: 导入了 n-skeleton 和正确的 SelectOption 类型
-import { NGrid, NGi, NCard, NSpace, NList, NListItem, NThing, NTag, NTabs, NTabPane, NSelect, NSkeleton, type SelectOption } from 'naive-ui';
+import { NIcon, NPopover, NSkeleton, NTag, NScrollbar, NCheckboxGroup, NCheckbox, NSpace } from 'naive-ui'; 
+import { FilterListFilled } from '@vicons/material';
 import BaseChart from '@/components/charts/BaseChart.vue';
-import type { EChartsOption } from 'echarts';
+import type { EChartsOption, LinearGradientObject } from 'echarts';
 import 'echarts-wordcloud';
 
-// --- 状态定义 ---
+// --- State ---
 const allPosts = ref<Post[]>([]);
 const scoreData = ref<ChartDataItem[]>([]);
 const wordCloudData = ref<ChartDataItem[]>([]);
-const isLoading = ref(true);
+const isInitialLoading = ref(true);
 
-// --- 筛选和排序的状态 ---
-const selectedTheme = ref<string | null>(null);
-const activeSort = ref<'comprehensive' | 'viewCount' | 'likeCount'>('comprehensive');
+// --- Controls State ---
+type SortKey = 'comprehensive' | 'viewCount' | 'likeCount' | 'commentCount';
+const sortOptions: { key: SortKey; label: string }[] = [
+  { key: 'comprehensive', label: '综合评价' },
+  { key: 'viewCount', label: '观看最多' },
+  { key: 'likeCount', label: '点赞最多' },
+  { key: 'commentCount', label: '评论最多' },
+];
+const activeSort = ref<SortKey>('comprehensive');
+const selectedThemes = ref<string[]>([]);
 
-// ✅ CHANGED: 修正了 themeOptions 的类型，并正确使用了 realThemes
-const themeOptions = computed((): SelectOption[] => {
-  return Object.entries(realThemes).map(([groupName, options]) => ({
-    type: 'group',
-    label: groupName,
-    key: groupName,
-    children: options.map(option => ({
-      label: option,
-      value: option,
-    })),
-  }));
-});
+const expandedPosts = reactive<Record<string, boolean>>({});
+const toggleExpand = (postId: string) => {
+  expandedPosts[postId] = !expandedPosts[postId];
+};
 
-// ✅✅✅ 核心修正：添加了 return 语句 ✅✅✅
+// --- Pagination State ---
+const currentPage = ref(1);
+const hasMorePosts = ref(true);
+const isMoreLoading = ref(false);
+
+// --- Computed Data ---
 const displayedPosts = computed(() => {
-  let posts = selectedTheme.value
-    ? allPosts.value.filter(p => p.theme === selectedTheme.value)
-    : [...allPosts.value];
+  let postsToFilter = [...allPosts.value];
 
-  switch (activeSort.value) {
-    case 'viewCount':
-      posts.sort((a, b) => b.viewCount - a.viewCount);
-      break;
-    case 'likeCount':
-      posts.sort((a, b) => b.likeCount - a.likeCount);
-      break;
-    case 'comprehensive':
-    default:
-      posts.sort((a, b) => (b.likeCount * 2 + b.commentCount) - (a.likeCount * 2 + a.commentCount));
-      break;
+  // 1. 先筛选
+  if (selectedThemes.value.length > 0) {
+    postsToFilter = postsToFilter.filter(post => 
+      // 只要帖子主题与任意一个已选主题匹配即可
+      selectedThemes.value.includes(post.theme)
+    );
   }
-  // ✅ 核心修正：返回处理后的数组
-  return posts; 
+
+  // 2. 再排序
+  const postsToSort = postsToFilter;
+  switch (activeSort.value) {
+    case 'viewCount': return postsToSort.sort((a, b) => b.viewCount - a.viewCount);
+    case 'likeCount': return postsToSort.sort((a, b) => b.likeCount - a.likeCount);
+    case 'commentCount': return postsToSort.sort((a, b) => b.commentCount - a.commentCount);
+    case 'comprehensive':
+    default: return postsToSort.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  }
 });
 
-// --- 图表配置 ---
-const scoreChartOption = computed((): EChartsOption => ({
-  xAxis: { type: 'category', data: scoreData.value.map(item => item.name) },
-  yAxis: { type: 'value' },
-  series: [{ data: scoreData.value.map(item => item.value), type: 'bar' }],
-  tooltip: { trigger: 'axis' }
-}));
+const removeTheme = (themeToRemove: string) => {
+  selectedThemes.value = selectedThemes.value.filter(theme => theme !== themeToRemove);
+};
 
+// --- API Calls & Logic ---
+const fetchPosts = async (page = 1) => {
+  if (page === 1) isInitialLoading.value = true;
+  else isMoreLoading.value = true;
+  
+  try {
+    const { posts: newPosts, hasMore } = await getHotspotPosts(page, 5);
+    if (page === 1) allPosts.value = newPosts;
+    else allPosts.value.push(...newPosts);
+    hasMorePosts.value = hasMore;
+  } catch (error) {
+    console.error("加载帖子失败:", error);
+  } finally {
+    if (page === 1) isInitialLoading.value = false;
+    else isMoreLoading.value = false;
+  }
+};
+
+const loadMorePosts = () => {
+  if (!isMoreLoading.value && hasMorePosts.value) {
+    currentPage.value++;
+    fetchPosts(currentPage.value);
+  }
+};
+
+const handleSortChange = (key: SortKey) => {
+    activeSort.value = key;
+};
+
+onMounted(() => {
+  fetchPosts(1);
+  getScoreChartData().then(res => scoreData.value = res);
+  getWordCloudData().then(res => wordCloudData.value = res);
+});
+
+// --- Chart Options ---
+const scoreChartOption = computed((): EChartsOption => ({
+    tooltip: { trigger: 'axis' },
+    grid: { left: '3%', right: '10%', top: '15%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'value', splitLine: { show: false } },
+    yAxis: {
+      type: 'category',
+      data: scoreData.value.map(item => item.name).reverse(),
+      axisLabel: { color: '#a0a0ab', fontSize: 10 }
+    },
+    series: [{
+      name: '综合评分', type: 'bar',
+      data: scoreData.value.map(item => item.value).reverse(),
+      itemStyle: {
+        borderRadius: [0, 5, 5, 0],
+        color: {
+          type: 'linear', x: 1, y: 0, x2: 0, y2: 0,
+          colorStops: [
+            { offset: 0, color: '#18a058' },
+            { offset: 1, color: '#63e2b7' }
+          ]
+        } as LinearGradientObject
+      },
+      showBackground: true,
+      backgroundStyle: { color: 'rgba(180, 180, 180, 0.1)' }
+    }]
+}));
 const wordCloudOption = computed((): EChartsOption => ({
-    tooltip: { trigger: 'item', formatter: '{b} : {c}' },
+    tooltip: { trigger: 'item' },
     series: [ {
         type: 'wordCloud',
         shape: 'circle',
-        sizeRange: [12, 50],
-        rotationRange: [-90, 90],
-        emphasis: {
-          focus: 'self',
-          textStyle: { fontWeight: 'bold' }
-        },
+        sizeRange: [14, 50],
+        rotationRange: [-45, 45],
         textStyle: {
-            color: () => `rgb(${[ Math.round(Math.random() * 160), Math.round(Math.random() * 160), Math.round(Math.random() * 160) ].join(',')})`
+            color: () => `rgb(${[
+                Math.round(150 + Math.random() * 105),
+                Math.round(150 + Math.random() * 105),
+                Math.round(150 + Math.random() * 105)
+            ].join(',')})`
         },
+        emphasis: { focus: 'self' },
         data: wordCloudData.value,
     } ] as any,
 }));
-
-// --- 数据获取 ---
-onMounted(async () => {
-  try {
-    isLoading.value = true;
-    const [postsRes, scoreRes, wordCloudRes] = await Promise.all([
-      getHotspotPosts(),
-      getScoreChartData(),
-      getWordCloudData()
-    ]);
-    allPosts.value = postsRes;
-    scoreData.value = scoreRes;
-    wordCloudData.value = wordCloudRes;
-  } catch (error) {
-    console.error("加载热度追踪页面数据时出错:", error);
-  } finally {
-    isLoading.value = false;
-  }
-});
 </script>
 
 <style scoped>
-.hotspot-tracking-page {
+.hotspot-page {
+  padding: 24px;
+  box-sizing: border-box;
+  height: calc(100vh - 20px);
   display: flex;
   flex-direction: column;
-  gap: 24px;
 }
+
 .page-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 48px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 1.8rem;
+  font-weight: bold;
+}
+
+.main-content {
+  flex-grow: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 48px;
+}
+
+.hotspot-section, .presentation-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.controls-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
+  width: 100%;
+  flex-shrink: 0;
+}
+.sort-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sort-buttons button, .filter-button {
+  background-color: transparent;
+  border: none;
+  color: #a0a0ab;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+.sort-buttons button:hover, .filter-button:hover {
+  color: #e2e2e5;
+}
+.sort-buttons button.active {
+  background-color: #3e3e42;
+  color: white;
+  font-weight: bold;
+}
+.filter-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-button.active {
+  color: #63e2b7;
+}
+
+.filter-panel {
+  width: 350px;
+  padding: 16px;
+}
+.filter-group {
+  margin-bottom: 12px;
+}
+.filter-group-title {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #a0a0ab;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #555;
+}
+
+.selected-filters-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px;
+  background-color: #2a2a2e;
+  border-radius: 8px;
+}
+
+.posts-list-wrapper {
+  flex-grow: 1;
+  min-height: 0;
+  position: relative;
+}
+.posts-list-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to top, #242323, transparent);
+  pointer-events: none;
+}
+.posts-list {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 16px;
+}
+.posts-list.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.posts-list::-webkit-scrollbar { width: 4px; }
+.posts-list::-webkit-scrollbar-track { background: transparent; }
+.posts-list::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; }
+
+.post-item {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid #3e3e42;
+}
+.post-meta {
+  flex: 0 0 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #a0a0ab;
+  align-self: flex-start;
+}
+.theme-main { font-size: 1rem; font-weight: bold; color: #e2e2e5; }
+.theme-sub { font-size: 0.9rem; }
+.post-time-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+.post-date { font-size: 0.8rem; }
+.post-time { font-size: 0.8rem; }
+
+
+.post-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  background-color: #2a2a2e;
+  padding: 16px;
+  border-radius: 12px;
+}
+.post-title { font-size: 1.1rem; font-weight: bold; margin: 0 0 8px 0; }
+.post-details {
+  font-size: 0.9rem;
+  color: #a0a0ab;
+  margin: 0 0 8px 0;
+  line-height: 1.6;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;  
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.post-details.is-expanded { -webkit-line-clamp: unset; line-clamp: unset; }
+.author { font-style: italic; font-weight: 500; color: #c7c7d1; margin-right: 4px; }
+.expand-button {
+  background: none;
+  border: none;
+  color: #63e2b7;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+.expand-button:hover { text-decoration: underline; }
+
+.post-stats {
+  flex: 0 0 200px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  text-align: right;
+  font-size: 0.9rem;
+  color: #a0a0ab;
+}
+.stat-item { display: flex; flex-direction: column; align-items: flex-end; }
+.stat-item strong { font-size: 1.1rem; font-weight: bold; color: #e2e2e5; }
+
+.load-more-container {
+  padding-top: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+:deep(.load-more-button.n-button) {
+  --n-color: #3e3e42 !important;
+  --n-color-hover: #555 !important;
+  --n-color-pressed: #555 !important;
+  --n-text-color: #e2e2e5 !important;
+  --n-border: 1px solid #555 !important;
+  --n-border-hover: 1px solid #777 !important;
+  --n-border-pressed: 1px solid #777 !important;
+  --n-height: 42px !important;
+  --n-padding-left: 24px !important;
+  --n-padding-right: 24px !important;
+  --n-border-radius: 21px !important;
+  --n-font-weight: bold !important;
+  transition: all 0.2s ease-in-out !important;
+}
+:deep(.load-more-button.n-button:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+:deep(.load-more-button.n-button:active) {
+  transform: scale(0.98);
+}
+
+.charts-grid {
+  flex-grow: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 24px;
+}
+.chart-container {
+  background-color: #2a2a2e;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.chart-container h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0 0 20px 0;
+  color: #c7c7d1;
+  flex-shrink: 0;
 }
 </style>
