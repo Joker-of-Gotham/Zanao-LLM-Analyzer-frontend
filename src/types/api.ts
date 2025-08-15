@@ -97,7 +97,8 @@ export interface ChatSession {
 
 /** 定义一个通用的流式API函数类型 */
 export type StreamedChatApi = (
-  prompt: string, 
+  // ✅ 最终修复：API 函数接收一个包含 prompt 和 stopSignal 的对象
+  options: { prompt: string, stopSignal: AbortSignal }, 
   onStream: (chunk: string) => void
 ) => Promise<void>;
 

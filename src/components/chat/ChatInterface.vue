@@ -1,39 +1,39 @@
 <template>
   <div class="chat-container">
-    <div class="chat-window">
-      <!-- 消息展示区 -->
-      <div ref="messagesContainerRef" class="messages-area">
-        <!-- 欢迎界面 -->
+    <div ref="messagesContainerRef" class="messages-area">
+      <div class="message-list-wrapper">
         <div v-if="!session || session.messages.length === 0" class="welcome-screen">
-          <div class="welcome-logo">Z</div>
           <h1 class="welcome-title">{{ title }}</h1>
         </div>
-        <!-- 消息列表 -->
         <div v-else class="message-list">
-          <div v-for="message in session.messages" :key="message.id" class="message-wrapper" :class="`role-${message.role}`">
-            <n-avatar round :style="{ backgroundColor: message.role === 'user' ? '#3b82f6' : '#10b981', flexShrink: 0 }">
-              {{ message.role === 'user' ? '我' : 'AI' }}
-            </n-avatar>
-            <div class="message-content" v-html="renderMarkdown(message.content)"></div>
+          <div v-for="message in session.messages" :key="message.id" class="message-row" :class="`role-${message.role}`">
+            <!-- ✅✅✅ 核心修复：所有消息都有一个 message-bubble ✅✅✅ -->
+            <div class="message-bubble">
+              <div class="message-content" v-html="renderMarkdown(message.content)"></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
     
-    <!-- 输入框区域 -->
     <div class="input-area-wrapper">
       <div class="input-box-container">
         <n-input
           v-model:value="userInput"
           type="textarea"
-          :autosize="{ minRows: 1, maxRows: 5 }"
+          :autosize="{ minRows: 1, maxRows: 8 }"
           placeholder="请输入您的问题..."
-          @keydown.enter.prevent="handleSend"
+          @keydown="handleKeyDown"
           class="chat-input"
         />
-        <n-button @click="handleSend" :disabled="isReplying" circle type="primary" class="send-button">
-          <template #icon><n-icon :component="ArrowUp" /></template>
-        </n-button>
+        <div class="button-container">
+          <n-button v-if="!isReplying" @click="handleSend" :disabled="!userInput.trim()" circle strong secondary class="send-button">
+            <template #icon><n-icon :component="ArrowUp" /></template>
+          </n-button>
+          <n-button v-else @click="handleStop" circle strong secondary class="stop-button">
+            <template #icon><n-icon :component="Stop" /></template>
+          </n-button>
+        </div>
       </div>
     </div>
   </div>
@@ -41,12 +41,14 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
-import { NAvatar, NInput, NButton, NIcon } from 'naive-ui';
-import { ArrowUp } from '@vicons/ionicons5';
+import { NInput, NButton, NIcon } from 'naive-ui';
+import { ArrowUp, Stop } from '@vicons/ionicons5';
 import { marked } from 'marked';
+// ✅ 最终修复：回归简单的 katex 导入
+import katex from 'katex'; 
+import 'katex/dist/katex.min.css';
 import type { ChatSession } from '@/types/api';
 
-// ✅ NEW: 定义一个接口来描述暴露给父组件的方法
 export interface ChatInterfaceExposed {
   startReplying: () => void;
   finishReplying: () => void;
@@ -58,186 +60,237 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'send', prompt: string): void;
+  (e: 'send', options: { prompt: string, stopSignal: AbortSignal }): void;
 }>();
 
 const userInput = ref('');
 const isReplying = ref(false);
 const messagesContainerRef = ref<HTMLDivElement | null>(null);
 
-// Markdown 渲染函数配置
+let abortController: AbortController | null = null;
+
 marked.setOptions({
-  gfm: true, // 启用 GitHub Flavored Markdown
-  breaks: true, // 将换行符渲染为 <br>
+  gfm: true,
+  breaks: true,
 });
+
+// ✅ 核心修复：为 KaTeX 的 div 添加一个专属类名 'katex-block'
 const renderMarkdown = (text: string) => {
-  // 如果内容为空，返回一个闪烁的光标效果
-  if (text === '') {
-    return '<span class="blinking-cursor">▍</span>';
-  }
+  if (text === '') return '<span class="blinking-cursor">▍</span>';
+  
+  text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match, formula) => {
+    try { 
+      // 在这里添加了 class="katex-block"
+      return `<div class="katex-block">${katex.renderToString(formula, { displayMode: true, throwOnError: false })}</div>`; 
+    } 
+    catch (e) { return match; }
+  });
+  
+  text = text.replace(/\$([^\n$]+?)\$/g, (match, formula) => {
+    try { return katex.renderToString(formula, { displayMode: false, throwOnError: false }); } 
+    catch (e) { return match; }
+  });
+  
   return marked.parse(text);
 };
 
-// 滚动到底部函数
-const scrollToBottom = () => {
+// ✅✅✅ 完整的 scrollToBottom 函数 ✅✅✅
+const scrollToBottom = (behavior: 'auto' | 'smooth' = 'smooth') => {
   nextTick(() => {
     if (messagesContainerRef.value) {
       messagesContainerRef.value.scrollTo({ 
         top: messagesContainerRef.value.scrollHeight, 
-        behavior: 'smooth' 
+        behavior
       });
     }
   });
 };
 
-// 监听会话消息的变化，自动滚动
-watch(
-  () => props.session?.messages,
-  () => {
-    scrollToBottom();
-  },
-  { deep: true }
-);
-
-// 发送消息
-const handleSend = async () => {
-  if (!userInput.value.trim() || isReplying.value) return;
-  
-  const prompt = userInput.value;
-  userInput.value = ''; // 立即清空输入框
-  isReplying.value = true;
-  
-  emit('send', prompt);
+// ✅✅✅ 完整的 handleAutoScroll 函数 ✅✅✅
+const handleAutoScroll = () => {
+  const el = messagesContainerRef.value;
+  if (el) {
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+    if (isAtBottom) {
+      scrollToBottom('smooth');
+    }
+  }
 };
 
-// ✅ CHANGED: 使用我们定义的接口来明确暴露的类型
+watch(() => props.session?.messages, handleAutoScroll, { deep: true });
+
+// ✅✅✅ 完整的 handleSend 函数 ✅✅✅
+const handleSend = async () => {
+  if (!userInput.value.trim() || isReplying.value) return;
+  const prompt = userInput.value;
+  userInput.value = '';
+  isReplying.value = true;
+  abortController = new AbortController();
+  emit('send', { prompt, stopSignal: abortController.signal });
+};
+
+// ✅✅✅ 完整的 handleStop 函数 ✅✅✅
+const handleStop = () => {
+  if (abortController) {
+    abortController.abort(); // 中止请求
+    isReplying.value = false;
+  }
+};
+
+// ✅✅✅ 完整的 handleKeyDown 函数 ✅✅✅
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey) {
+    event.preventDefault();
+    handleSend();
+  }
+};
+
+// ✅✅✅ 完整的 defineExpose 函数 ✅✅✅
 defineExpose<ChatInterfaceExposed>({
   startReplying: () => { isReplying.value = true; },
-  finishReplying: () => { isReplying.value = false; },
+  finishReplying: () => {
+    isReplying.value = false;
+    abortController = null;
+  },
 });
 </script>
 
 <style scoped>
-/* 全面对标 ChatGPT 风格 */
+/* ✅ 最终修复：移除了所有空的 CSS 规则 */
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   position: relative;
-  background-color: #343541;
-}
-
-.chat-window {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-  overflow: hidden; /* 隐藏滚动条，由内部 messages-area 控制 */
+  background-color: #242323;
+  overflow: hidden;
 }
 
 .messages-area {
-  width: 100%;
-  max-width: 800px;
+  flex-grow: 1;
   overflow-y: auto;
-  padding: 20px 10px;
+  position: relative;
+  padding-bottom: 180px;
 }
+.messages-area::-webkit-scrollbar { width: 6px; }
+.messages-area::-webkit-scrollbar-track { background: transparent; }
+.messages-area::-webkit-scrollbar-thumb { background-color: #555; border-radius: 6px; }
+.messages-area::-webkit-scrollbar-thumb:hover { background-color: #777; }
 
-/* 欢迎界面 */
 .welcome-screen {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
   height: 100%;
-  padding-bottom: 20vh;
+  padding-bottom: 180px;
+  box-sizing: border-box;
 }
-
-.welcome-logo {
-  width: 50px;
-  height: 50px;
-  background-color: #202123;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 1.8rem;
-  font-weight: bold;
-  color: white;
-  margin-bottom: 24px;
-}
-
 .welcome-title {
   font-size: 1.5rem;
   font-weight: 500;
   color: #c7c7d1;
 }
 
-/* 消息列表 */
-.message-list {
-  padding-bottom: 150px; /* 为输入框区域留出足够的空间 */
+.message-list-wrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
-.message-wrapper {
-  display: flex;
-  gap: 16px;
-  padding: 16px 0;
-  width: 100%;
+.message-row { display: flex; margin-bottom: 24px; }
+.message-row.role-user { justify-content: flex-end; }
+.message-row.role-assistant { justify-content: flex-start; }
+
+/* 核心：消息气泡样式 */
+.message-bubble {
+  max-width: 80%; /* 限制最大宽度 */
+  padding: 12px 18px;
+  border-radius: 20px;
+  position: relative;
+}
+
+/* ✅ 核心修复：分别为 user 和 assistant 定义不同的背景和圆角 */
+.message-row.role-user .message-bubble {
+  background-color: #2a2a2e;
+  border-radius: 20px 20px 4px 20px;
 }
 
 .message-content {
-  padding-top: 2px;
+  color: #e2e2e5;
   line-height: 1.7;
-  color: #d1d5db;
-  width: calc(100% - 56px); /* 减去头像和gap的宽度 */
+  font-size: 1rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
-.message-content:deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-/* 闪烁光标 */
-.blinking-cursor {
-  font-weight: bold;
-  animation: blink 1s step-start 0s infinite;
-}
-@keyframes blink {
-  50% { opacity: 0; }
+/* KaTeX 公式块的样式 */
+:deep(.katex-block) {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 16px;
+  background-color: #242323; /* 稍亮的背景色，与消息气泡一致 */
+  border-radius: 8px;
+  text-align: center; /* 公式居中 */
 }
 
-/* 输入框区域 */
+/* Marked.js 代码块的样式 */
+:deep(pre) {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 16px;
+  background-color: #101014; /* 更深的背景色 */
+  border-radius: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #101014;
+}
+:deep(pre)::-webkit-scrollbar { height: 6px; }
+:deep(pre)::-webkit-scrollbar-thumb { background-color: #555; }
+
+
+/* 单行代码的样式 */
+:deep(code) {
+  background-color: #101014;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: 'Consolas', Courier, monospace;
+}
+
 .input-area-wrapper {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px 10px;
-  background: linear-gradient(to top, #343541 30%, transparent);
-  display: flex;
-  justify-content: center;
+  padding: 24px 20px;
+  background-color: #242323;
+  box-shadow: 0 -10px 20px #242323;
 }
-
 .input-box-container {
   position: relative;
-  width: 100%;
   max-width: 800px;
-  display: flex;
-  align-items: flex-end;
+  margin: 0 auto;
 }
-
-.chat-input {
-  background-color: #40414f !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+:deep(.n-input) {
+  --n-border-radius: 24px !important;
+  --n-padding-left: 20px !important;
+  --n-padding-right: 60px !important;
 }
-
 :deep(.n-input .n-input__textarea-el) {
-  padding: 10px 50px 10px 16px; /* 为按钮留出空间 */
-  line-height: 1.5;
-  color: #ececf1;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  line-height: 1.6;
 }
 
-.send-button {
+.button-container {
   position: absolute;
-  right: 10px;
-  bottom: 8px;
+  right: 6px;
+  bottom: 6px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
 }
 </style>

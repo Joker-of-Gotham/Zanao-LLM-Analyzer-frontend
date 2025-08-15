@@ -18,7 +18,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useChat } from '@/composables/useChat';
-// ✅ CHANGED: 从组件导入暴露的类型接口
 import ChatInterface, { type ChatInterfaceExposed } from '@/components/chat/ChatInterface.vue'; 
 import ChatHistory from '@/components/chat/ChatHistory.vue';
 import { mockStreamedChatApi } from '../../../mock/analysis';
@@ -39,30 +38,23 @@ const {
 const chatInterfaceRef = ref<ChatInterfaceExposed | null>(null);
 
 // 定义本页面的 API，可以对 prompt 做预处理
-const handleResourceRetrievalApi: StreamedChatApi = async (prompt, onStream) => {
-  // 模拟对 prompt 的预处理
+// ✅ 最终修复：API 函数的签名与 StreamedChatApi 类型一致
+const handleResourceRetrievalApi: StreamedChatApi = async ({ prompt, stopSignal }, onStream) => {
   const processedPrompt = `[资源检索模式] ${prompt}`;
-  return mockStreamedChatApi(processedPrompt, onStream);
+  return mockStreamedChatApi({ prompt: processedPrompt, stopSignal }, onStream);
 };
 
-// 处理来自 ChatInterface 的发送事件
-const handleSend = async (prompt: string) => {
-  if (!activeSession.value) {
-    createNewSession();
-  }
-
+// ✅ 最终修复：handleSend 的参数解构和调用正确
+const handleSend = async ({ prompt, stopSignal }: { prompt: string, stopSignal: AbortSignal }) => {
+  if (!activeSession.value) createNewSession();
   addMessageToActiveSession({ role: 'user', content: prompt });
   addMessageToActiveSession({ role: 'assistant', content: '' });
 
   try {
-    // 调用本页面专属的 API
-    await handleResourceRetrievalApi(prompt, (chunk) => {
+    await handleResourceRetrievalApi({ prompt, stopSignal }, (chunk) => {
       updateStreamingMessage(chunk);
     });
     generateTitleForActiveSession();
-  } catch(error) {
-    console.error("资源检索API出错:", error);
-    updateStreamingMessage("\n\n抱歉，回复出错了。");
   } finally {
     chatInterfaceRef.value?.finishReplying();
   }
@@ -88,8 +80,14 @@ onMounted(() => {
 
 <style scoped>
 .page-wrapper {
-  padding: 0;
-  height: 100vh;
-  position: relative;
+  display: flex; /* ✅ 关键：必须是 flex 布局 */
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 让 ChatInterface 自动填充剩余空间 */
+:deep(.chat-container) {
+  flex-grow: 1;
+  min-width: 0; /* 防止内容溢出时撑破布局 */
 }
 </style>

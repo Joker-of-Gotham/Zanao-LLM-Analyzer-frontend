@@ -1,4 +1,4 @@
-import type { Post, ChartDataItem, SentimentAnalysisData, ActiveUser, EmergingTopic } from '../src/types/api';
+import type { Post, ChartDataItem, SentimentAnalysisData, ActiveUser, EmergingTopic, StreamedChatApi } from '../src/types/api';
 
 export const realThemes = {
   "机会类型": ["兼职 / 实习", "校园活动", "奖助学金", "比赛/竞赛", "调研/志愿"],
@@ -85,11 +85,11 @@ export const mockActiveUsers: ActiveUser[] = [
  * @param prompt 用户的输入
  * @param onStream 流式回调函数，用于逐字发送内容
  */
-export const mockStreamedChatApi = async (
-  prompt: string,
-  onStream: (chunk: string) => void
-): Promise<void> => {
-  const fullResponse = `这是针对您的问题“${prompt}”的模拟回复。这段回复是为了测试逐字生成效果而设计的，它会像打字机一样一个字一个字地出现，从而提供更接近真实大语言模型的交互体验。`;
+export const mockStreamedChatApi: StreamedChatApi = async (
+  { prompt, stopSignal },
+  onStream
+) => {
+  const fullResponse = `这是针对您的问题“${prompt}”的模拟回复...`;
   
   let index = 0;
   const intervalId = setInterval(() => {
@@ -99,14 +99,22 @@ export const mockStreamedChatApi = async (
     } else {
       clearInterval(intervalId);
     }
-  }, 50); // 每 50ms 输出一个字
+  }, 50);
 
-  // 实际应用中，这里会返回一个 Promise，在流结束后 resolve
+  // 监听中止信号，清理定时器
+  stopSignal.addEventListener('abort', () => {
+    clearInterval(intervalId);
+    console.log('模拟 API 已被中止');
+  });
+
   return new Promise(resolve => {
-    setTimeout(() => resolve(), fullResponse.length * 50 + 500);
+    const timeoutId = setTimeout(() => resolve(), fullResponse.length * 50 + 500);
+    stopSignal.addEventListener('abort', () => {
+      clearTimeout(timeoutId);
+      resolve(); // 中止时也立即 resolve
+    });
   });
 };
-
 // ============================================ 模拟舆情分析部分的数据 ============================================
 
 // ✅ NEW: 模拟新晋话题数据

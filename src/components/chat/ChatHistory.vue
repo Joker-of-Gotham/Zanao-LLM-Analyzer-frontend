@@ -1,34 +1,39 @@
 <template>
-  <div class="history-container" :class="{ 'is-expanded': isExpanded }">
-    <!-- 折叠时的句柄 -->
-    <div class="handle" @click="isExpanded = !isExpanded">
-      <!-- ✅ CHANGED: 使用新的图标组件 -->
-      <n-icon :component="isExpanded ? ChevronLeftFilled : ChevronRightFilled" />
-    </div>
-
-    <!-- 展开后的内容 -->
-    <div v-if="isExpanded" class="history-content">
-      <div class="header">
-        <n-button block strong secondary @click="emit('new-chat')">
-          + 新的对话
-        </n-button>
+  <aside class="history-sidebar" :class="{ 'is-collapsed': !isExpanded }">
+    <div class="sidebar-header">
+      <div class="logo">
+        <template v-if="isExpanded">
+          <span>对话历史</span>
+        </template>
       </div>
-      <n-scrollbar style="max-height: calc(100% - 60px);">
+      <n-button text class="collapse-button" @click="isExpanded = !isExpanded">
+        <template #icon>
+          <n-icon :component="isExpanded ? KeyboardDoubleArrowLeftRound : KeyboardDoubleArrowRightRound" />
+        </template>
+      </n-button>
+    </div>
+    
+    <!-- ✅ 1. 使用 n-menu 来统一管理所有可点击项 -->
+    <n-config-provider :theme-overrides="menuThemeOverrides">
+      <n-scrollbar style="flex-grow: 1; min-height: 0;">
         <n-menu
-          :options="historyOptions"
+          :options="menuOptions"
           :value="activeSessionId"
-          @update:value="sessionId => emit('switch-chat', sessionId)"
+          :collapsed="!isExpanded"
+          :collapsed-width="80"
+          :collapsed-icon-size="24"
+          @update:value="handleMenuSelect"
         />
       </n-scrollbar>
-    </div>
-  </div>
+    </n-config-provider>
+  </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { NButton, NMenu, NIcon, NScrollbar } from 'naive-ui';
-import type { MenuOption } from 'naive-ui';
-import { ChevronLeftFilled, ChevronRightFilled } from '@vicons/material';
+import { h, ref, computed, Component } from 'vue';
+import { NMenu, NIcon, NScrollbar, NConfigProvider } from 'naive-ui';
+import type { MenuOption, GlobalThemeOverrides } from 'naive-ui';
+import { KeyboardDoubleArrowLeftRound, KeyboardDoubleArrowRightRound, CreateOutlined, ChatBubbleOutlineRound } from '@vicons/material';
 import type { ChatSession } from '@/types/api';
 
 const props = defineProps<{
@@ -43,57 +48,120 @@ const emit = defineEmits<{
 
 const isExpanded = ref(true);
 
-const historyOptions = computed((): MenuOption[] =>
-  props.sessions.map(session => ({
+const menuThemeOverrides: GlobalThemeOverrides = {
+  Menu: {
+    itemHeight: '48px', // 稍微减小高度
+    itemColorActive: 'rgba(255, 255, 255, 0.1)',
+    itemTextColorActive: '#FFFFFF',
+    itemIconColorActive: '#FFFFFF',
+    itemColorActiveCollapsed: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+  }
+};
+
+const renderIcon = (icon: Component) => () => h(NIcon, null, { default: () => h(icon) });
+
+// ✅ 2. 核心修复：将“新对话”作为菜单的第一个特殊选项
+const menuOptions = computed((): MenuOption[] => {
+  // “新的对话”按钮
+  const newChatOption: MenuOption = {
+    label: '进入新对话',
+    key: 'new-chat', // 使用一个特殊的 key
+    icon: renderIcon(CreateOutlined),
+    title: '进入新对话'
+  };
+
+  // 历史记录会话
+  const historySessionOptions: MenuOption[] = props.sessions.map(session => ({
     label: session.title,
     key: session.id,
-  }))
-);
+    icon: renderIcon(ChatBubbleOutlineRound),
+    title: session.title,
+  }));
+
+  return [
+    newChatOption,
+    ...historySessionOptions,
+  ];
+});
+
+// ✅ 3. 核心修复：统一的点击处理逻辑
+const handleMenuSelect = (key: string) => {
+  if (key === 'new-chat') {
+    emit('new-chat');
+  } else {
+    emit('switch-chat', key);
+  }
+};
+
 </script>
 
 <style scoped>
-.history-container {
-  position: fixed;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  background-color: #2a2a2e;
-  border: 1px solid #3e3e42;
-  border-right: none;
-  border-radius: 12px 0 0 12px;
-  transition: all 0.3s ease;
-  z-index: 1000;
-  height: 70vh;
-  max-height: 600px;
-  display: flex;
-}
-
-.history-container.is-expanded {
-  width: 280px;
-}
-
-.history-container:not(.is-expanded) {
-  width: 32px;
-}
-
-.handle {
-  width: 32px;
+/* ✅✅✅ 最终的、简洁的样式 ✅✅✅ */
+.history-sidebar {
+  position: relative;
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: #c7c7d1;
-}
-.handle:hover {
-  color: white;
+  width: 260px;
+  background-color: #18181c;
+  border-left: 1px solid #2d2d30;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
 }
 
-.history-content {
-  width: 100%;
-  padding: 8px;
-  overflow: hidden;
+.history-sidebar.is-collapsed {
+  width: 80px;
 }
-.header {
-  padding-bottom: 8px;
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 60px;
+  flex-shrink: 0;
+}
+
+.history-sidebar.is-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.logo {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+.history-sidebar.is-collapsed .logo {
+  opacity: 0;
+}
+
+.collapse-button {
+  font-size: 20px;
+}
+
+/* 移除了 .new-chat-section */
+
+:deep(.n-menu) {
+  flex-grow: 1;
+  padding: 8px 12px;
+}
+
+/* 展开状态下 */
+:deep(.n-menu:not(.n-menu--collapsed) .n-menu-item-content) {
+  padding: 0 16px !important;
+}
+
+/* 收缩状态下 */
+:deep(.n-menu--collapsed .n-menu-item-content) {
+  padding: 0 !important;
+  justify-content: center !important;
+}
+:deep(.n-menu--collapsed .n-menu-item-content__icon) {
+  margin: 0 !important;
 }
 </style>
