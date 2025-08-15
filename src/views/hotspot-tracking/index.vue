@@ -119,7 +119,7 @@ import { ref, onMounted, computed, reactive } from 'vue';
 import { getHotspotPosts, getScoreChartData, getWordCloudData } from '@/api';
 import { realThemes } from '../../../mock/analysis';
 import type { Post, ChartDataItem } from '@/types/api';
-import { NIcon, NPopover, NSkeleton, NTag, NScrollbar, NCheckboxGroup, NCheckbox, NSpace } from 'naive-ui'; 
+import { NIcon, NPopover, NSkeleton, NButton, NTag, NScrollbar, NCheckboxGroup, NCheckbox, NSpace } from 'naive-ui';
 import { FilterListFilled } from '@vicons/material';
 import BaseChart from '@/components/charts/BaseChart.vue';
 import type { EChartsOption, LinearGradientObject } from 'echarts';
@@ -154,18 +154,16 @@ const isMoreLoading = ref(false);
 
 // --- Computed Data ---
 const displayedPosts = computed(() => {
-  let postsToFilter = [...allPosts.value];
-
-  // 1. 先筛选
+  // 1. 先进行纯前端筛选
+  let filteredPosts = allPosts.value;
   if (selectedThemes.value.length > 0) {
-    postsToFilter = postsToFilter.filter(post => 
-      // 只要帖子主题与任意一个已选主题匹配即可
+    filteredPosts = allPosts.value.filter(post => 
       selectedThemes.value.includes(post.theme)
     );
   }
 
-  // 2. 再排序
-  const postsToSort = postsToFilter;
+  // 2. 再对筛选结果进行排序
+  const postsToSort = [...filteredPosts];
   switch (activeSort.value) {
     case 'viewCount': return postsToSort.sort((a, b) => b.viewCount - a.viewCount);
     case 'likeCount': return postsToSort.sort((a, b) => b.likeCount - a.likeCount);
@@ -180,14 +178,30 @@ const removeTheme = (themeToRemove: string) => {
 };
 
 // --- API Calls & Logic ---
+const fetchChartData = async () => {
+  try {
+    const [scoreRes, wordCloudRes] = await Promise.all([
+      getScoreChartData(),
+      getWordCloudData()
+    ]);
+    scoreData.value = scoreRes;
+    wordCloudData.value = wordCloudRes;
+  } catch (error) {
+    console.error("加载图表数据失败:", error);
+  }
+};
+
 const fetchPosts = async (page = 1) => {
   if (page === 1) isInitialLoading.value = true;
   else isMoreLoading.value = true;
   
   try {
     const { posts: newPosts, hasMore } = await getHotspotPosts(page, 5);
-    if (page === 1) allPosts.value = newPosts;
-    else allPosts.value.push(...newPosts);
+    if (page === 1) {
+      allPosts.value = newPosts;
+    } else {
+      allPosts.value.push(...newPosts);
+    }
     hasMorePosts.value = hasMore;
   } catch (error) {
     console.error("加载帖子失败:", error);
@@ -210,8 +224,7 @@ const handleSortChange = (key: SortKey) => {
 
 onMounted(() => {
   fetchPosts(1);
-  getScoreChartData().then(res => scoreData.value = res);
-  getWordCloudData().then(res => wordCloudData.value = res);
+  fetchChartData();
 });
 
 // --- Chart Options ---

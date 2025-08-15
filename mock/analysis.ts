@@ -27,16 +27,32 @@ const allMockPosts: Post[] = [
   { id: 'p011', theme: '生活服务 / 外卖团购', username: '拼单大师', score: 84.1, title: '楼下奶茶店拼单，有无兄弟姐妹', content: '内容：新品买一送一，还差一杯就凑够了，速来！', postTime: '2025-08-11 15:00', viewCount: 300, likeCount: 15, commentCount: 5 },
 ];
 
-export const getMockHotspotPosts = (page = 1, limit = 5): Promise<{ posts: Post[], hasMore: boolean }> => {
+// ✅✅✅ 核心修复：让模拟 API 支持筛选 ✅✅✅
+export const getMockHotspotPosts = (
+  page = 1, 
+  limit = 5,
+  filters: { themes?: string[] } = {} // 接收一个筛选对象
+): Promise<{ posts: Post[], hasMore: boolean }> => {
+
+  // 1. 先根据筛选条件过滤整个数据库
+  let filteredPosts = allMockPosts;
+  if (filters.themes && filters.themes.length > 0) {
+    filteredPosts = allMockPosts.filter(post => 
+      filters.themes!.includes(post.theme)
+    );
+  }
+
+  // 2. 再对过滤后的结果进行分页
   const start = (page - 1) * limit;
   const end = start + limit;
-  const paginatedPosts = allMockPosts.slice(start, end);
-  const hasMore = end < allMockPosts.length;
+  const paginatedPosts = filteredPosts.slice(start, end);
+  const hasMore = end < filteredPosts.length;
 
+  // 模拟网络延迟
   return new Promise(resolve => {
     setTimeout(() => {
       resolve({ posts: paginatedPosts, hasMore });
-    }, 500);
+    }, 300); // 减少一点延迟以改善体验
   });
 };
 

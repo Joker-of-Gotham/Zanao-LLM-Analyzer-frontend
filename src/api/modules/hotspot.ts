@@ -5,12 +5,16 @@ import { getMockHotspotPosts, mockScoreChart, mockWordCloud } from '../../../moc
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 // 导出的函数，它会根据环境变量决定调用哪个数据源
-export const getHotspotPosts = (page = 1, limit = 5): Promise<{ posts: Post[], hasMore: boolean }> => {
+export const getHotspotPosts = (
+  page = 1, 
+  limit = 5,
+  filters: { themes?: string[] } = {} // 添加可选的 filters 参数
+): Promise<{ posts: Post[], hasMore: boolean }> => {
   if (USE_MOCK) {
-    return getMockHotspotPosts(page, limit);
+    return getMockHotspotPosts(page, limit, filters); // 将 filters 传递给模拟函数
   }
-  // 这里的返回值类型需要与 getMockHotspotPosts 保持一致
-  return http.get('/hotspot/posts', { params: { page, limit } });
+  // 真实 API 请求，将 filters 中的 themes 作为查询参数
+  return http.get('/hotspot/posts', { params: { page, limit, themes: filters.themes } });
 };
 
 export const getScoreChartData = (): Promise<ChartDataItem[]> => {
